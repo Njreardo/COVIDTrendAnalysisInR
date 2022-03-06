@@ -1,0 +1,103 @@
+---
+title: "Final Project"
+author: "Nick Reardon"
+date: October 20 2020
+output:
+  
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(ggplot2)
+library(scales)
+
+df <- read.csv('C:/Users/Nick/Documents/School/Statistics/dsc520-master/data/estimated_inpatient_all.csv')
+```
+##Last week Final Project: Coronavirus Trend Analysis
+
+There's some cleaning that had to be done to this dataset. First, we have to make everything numerical or set as a date for time-series analysis. So that's what we do. Replace the commas and make them into the right object and remove anything in there that may make it look like a character object.
+
+```{r echo=TRUE}
+df$Count.LL <- as.numeric(gsub(",","",df$Count.LL))
+df$Count.UL <- as.numeric(gsub(",","",df$Count.UL))
+df$collection_date <- as.Date(df$collection_date)
+df$Total.Inpatient.Beds <- as.numeric(gsub(",","",df$Total.Inpatient.Beds))
+df$Inpatient.Beds.Occupied.Estimated <- as.numeric(gsub(",","",df$Inpatient.Beds.Occupied.Estimated))
+df$Total.LL <- as.numeric(gsub(",","",df$Total.LL))
+df$Total.UL <- as.numeric(gsub(",","",df$Total.UL))
+```
+
+Ok, after everything has been changed to the right format, let's see what we've done and take a quick look at our dataset.
+
+```{r echo=TRUE}
+summary(df)
+
+head(df)
+```
+
+That's not the ideal way to look at the data. Let's see what it looks like when we plot it out over time...
+
+```{r echo=TRUE}
+ggplot(df, aes(x=collection_date, y=Percentage.of.Inpatient.Beds.Occupied.Estimated, color = state)) + geom_line()
+```
+
+We can see the trend somewhat looking at this graph which means that we can probably do some good predictive analytics. This is also just a way to look at the percentage of beds they have occupied in relation to the total amount of beds that they have. Let's take a look at how many beds there are in Michigan and its' neighbor states.
+
+```{r echo=TRUE}
+ggplot(subset(df, state %in% c("MI", "OH", "IL", "IN")), aes(x=state, y=Total.Inpatient.Beds, color=state)) + geom_histogram(stat="identity")
+```
+
+Ok, so we can see that, unfortunately, Michigan (my home state) doesn't have as many beds as Illinois and Ohio but has more than Indiana at least. Let's see how much of their beds are occupied on the most recent day that we have data for.
+
+```{r echo=TRUE}
+sub_df <- subset(df, state %in% c("MI", "OH", "IL", "IN"))
+sub_df <- subset(sub_df, collection_date %in% max(collection_date))
+
+ggplot(sub_df, aes(x=state, y=Percentage.of.Inpatient.Beds.Occupied.Estimated, color=state)) + geom_histogram(stat="identity")
+```
+
+Uh oh. As of November 4th, 2020, Michigan has approximately 76% of their beds used as opposed to the surrounding states which have less of their capacity taken. No matter the way you look at this region it's not good. Let's take a look at how this value has changed over time in Michigan and see if we can find a trend.
+
+```{r echo=TRUE}
+mi <- subset(df, state %in% c("MI"))
+
+ggplot(mi, aes(x=collection_date, y=Percentage.of.Inpatient.Beds.Occupied.Estimated, color = state)) + geom_line()
+```
+
+Let's add a line to see if the trend we're seeing (upward trend as time goes on) is accurate.
+
+```{r echo=TRUE}
+ggplot(mi, aes(x=collection_date, y=Percentage.of.Inpatient.Beds.Occupied.Estimated, color = state)) + geom_line() + 
+  geom_smooth(method='lm')
+```
+
+Ok, yes there is definitely an upward trend. I should say that I would be remiss if I didn't mention the wave nature of this graph. My hypothesis is that you'll see more activity on the weekends than on the weekdays because that is what it appears like to me.
+
+![](C:/Users/Nick/Pictures/Octobercal.png)
+
+So if we take a look at the 6th, 7th, 8th, and 9th of October (the first set of high points on the graph) we can see that it is not over the weekend, so the conclusion is that I am wrong. I guess coronavirus doesn't discriminate.
+
+Just for fun, let's see if we can find any significant correlations in the data by doing multiple regression and see if we can have a somewhat decent way to predict the future given the current trend.
+
+```{r echo=TRUE}
+fit <- lm(Percentage.of.Inpatient.Beds.Occupied.Estimated ~ ., df)
+summary(fit)
+```
+
+Obviously there's something wrong here. Our R squared value is 1 which means that we can make perfect predictions no matter what. Let's take a look at what we can get from using ARIMA (Auto-Regressive Integrated Moving Averages).
+
+```{r echo=FALSE}
+library(forecast)
+arima_fit <- auto.arima(df$Percentage.of.Inpatient.Beds.Occupied.Estimated)
+forecastedValues <- forecast(arima_fit, 100)
+plot(forecastedValues, main = "Forecast (Percentage of Inpatient Beds Occupied)", 
+col.main = "darkgreen")
+```
+
+It looks like our ARIMA model is predicting that the total amount of inpatient beds is going to stay lower for the future for all states. Of course, by this time we know that the COVID spike is higher for the colder months than for the data that we have right now (as you can see in the following graph).
+
+![](C:/Users/Nick/Pictures/covidgraph.png)
+
+This is obviously a much harder problem to forecast. We've never seen anything like this in the past so making a model needs to have certain assumptions based on the trends of diseases that we already know about (such as the flu). With COVID we are seeing that descriptive analytics is much more powerful than predictive. We know intuitively what is going to happen, but we have no idea of when it's going to slow down or when a vaccine will be released, so our predictions are very easily nullified given the fact that there are spurious relationships that we are currently unaware of.
